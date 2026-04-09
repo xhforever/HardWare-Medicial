@@ -3,7 +3,7 @@ MediGenius — core/state.py
 AgentState TypedDict and state helper functions.
 """
 
-from typing import Dict, List, Optional, TypedDict
+from typing import Any, Dict, List, Optional, TypedDict
 
 from langchain_core.documents import Document
 
@@ -35,6 +35,11 @@ class AgentState(TypedDict):
     routing_reason: str
     rewrite_reason: str
     conversation_history: List[Dict]
+    conversation_summary: str
+    summary_updated_at: Optional[str]
+    summary_source: str
+    summary_signature: Optional[str]
+    summary_used: bool
     keyword_hit: bool
     use_rag: bool
     need_rag: bool
@@ -53,6 +58,11 @@ class AgentState(TypedDict):
     safety_level: str
     domain: str
     ecg_metrics: str
+    token_budget: Dict[str, int]
+    prompt_token_estimate: int
+    context_compression_used: bool
+    cache_stats: Dict[str, int]
+    node_metrics: Dict[str, Dict[str, Any]]
     flow_trace: List[str]
 
 
@@ -83,6 +93,11 @@ def initialize_conversation_state() -> AgentState:
         "routing_reason": "",
         "rewrite_reason": "",
         "conversation_history": [],
+        "conversation_summary": "",
+        "summary_updated_at": None,
+        "summary_source": "",
+        "summary_signature": None,
+        "summary_used": False,
         "keyword_hit": False,
         "use_rag": False,
         "need_rag": False,
@@ -101,6 +116,11 @@ def initialize_conversation_state() -> AgentState:
         "safety_level": "SAFE",
         "domain": "general",
         "ecg_metrics": "",
+        "token_budget": {},
+        "prompt_token_estimate": 0,
+        "context_compression_used": False,
+        "cache_stats": {"hits": 0, "misses": 0},
+        "node_metrics": {},
         "flow_trace": [],
     }
 
@@ -131,6 +151,7 @@ def reset_query_state(state: AgentState) -> AgentState:
             "reranked_rag_context": [],
             "routing_reason": "",
             "rewrite_reason": "",
+            "summary_used": bool(state.get("conversation_summary")),
             "keyword_hit": False,
             "use_rag": False,
             "need_rag": False,
@@ -149,6 +170,11 @@ def reset_query_state(state: AgentState) -> AgentState:
             "safety_level": "SAFE",
             "domain": "general",
             "ecg_metrics": "",
+            "token_budget": {},
+            "prompt_token_estimate": 0,
+            "context_compression_used": False,
+            "cache_stats": {"hits": 0, "misses": 0},
+            "node_metrics": {},
             "flow_trace": [],
         }
     )

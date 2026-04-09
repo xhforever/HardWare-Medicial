@@ -7,7 +7,12 @@ import json
 
 from app.core.logging_config import logger
 from app.core.state import AgentState, append_flow_trace
-from app.tools.llm_client import coerce_response_text, get_light_llm
+from app.services.cache_service import cache_service, record_cache_result
+from app.tools.llm_client import (
+    coerce_response_text,
+    get_light_llm,
+    invoke_with_metrics,
+)
 
 LIGHTWEIGHT_CHITCHAT = {
     "hi",
@@ -50,6 +55,23 @@ def JudgeNeedRAGAgent(state: AgentState) -> AgentState:
         state["search_query"] = None
         return state
 
+    cache_key = cache_service.make_key(
+        "judge_need_rag",
+        {
+            "tenant_id": state.get("tenant_id", "default"),
+            "user_id": state.get("user_id", "anonymous"),
+            "question": question,
+        },
+    )
+    cached = cache_service.get(cache_key)
+    if cached:
+        state["need_rag"] = bool(cached.get("need_rag", False))
+        state["search_query"] = cached.get("search_query")
+        state["current_tool"] = cached.get("current_tool")
+        record_cache_result(state, "judge_need_rag", True)
+        return state
+    record_cache_result(state, "judge_need_rag", False)
+
     llm = get_light_llm(
         tenant_id=state.get("tenant_id", "default"),
         user_id=state.get("user_id", "anonymous"),
@@ -67,13 +89,26 @@ def JudgeNeedRAGAgent(state: AgentState) -> AgentState:
     )
 
     try:
-        raw = llm.invoke(prompt)
+        raw = invoke_with_metrics(
+            llm,
+            prompt,
+            node_name="judge_need_rag",
+            state=state,
+        )
         content = coerce_response_text(raw)
         parsed = json.loads(_extract_json_block(content))
         need_rag = bool(parsed.get("need_rag", False))
         state["need_rag"] = need_rag
         state["search_query"] = question if need_rag else None
         state["current_tool"] = "query_rewriter" if need_rag else "executor"
+        cache_service.set(
+            cache_key,
+            {
+                "need_rag": state["need_rag"],
+                "search_query": state["search_query"],
+                "current_tool": state["current_tool"],
+            },
+        )
         logger.info("JudgeNeedRAG: need_rag=%s", need_rag)
     except Exception as exc:
         logger.warning("JudgeNeedRAG failed, fallback to no-rag: %s", exc)

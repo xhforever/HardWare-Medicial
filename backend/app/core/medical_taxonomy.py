@@ -59,7 +59,28 @@ DEPARTMENT_TAXONOMY: Dict[str, Dict[str, object]] = {
     "infectious_disease": {
         "zh": "感染科",
         "aliases": ["infectious_disease", "infection", "感染科"],
-        "keywords": ["感染", "发热", "病毒", "细菌", "传染", "乙肝"],
+        "keywords": [
+            "感染",
+            "发热",
+            "高热",
+            "病毒",
+            "细菌",
+            "传染",
+            "乙肝",
+            "丙肝",
+            "肝炎",
+            "hepatitis",
+            "hiv",
+            "艾滋",
+            "结核",
+            "tuberculosis",
+            "疟疾",
+            "malaria",
+            "性传播",
+            "母婴传播",
+            "耐药",
+            "寒战",
+        ],
     },
     "general_surgery": {
         "zh": "普外科",
@@ -84,7 +105,7 @@ DEPARTMENT_TAXONOMY: Dict[str, Dict[str, object]] = {
     "pediatrics": {
         "zh": "儿科",
         "aliases": ["pediatrics", "peds", "儿科"],
-        "keywords": ["儿童", "宝宝", "小孩", "婴儿", "生长发育", "奶量"],
+        "keywords": ["儿童", "宝宝", "小孩", "孩子", "婴儿", "生长发育", "奶量"],
     },
     "dermatology": {
         "zh": "皮肤科",
@@ -159,11 +180,14 @@ def normalize_department_code(value: str | None) -> str | None:
 
 def infer_department_candidates(question: str, top_k: int = 3) -> List[dict]:
     q = (question or "").lower()
+    pediatric_hint = any(token in q for token in ["儿童", "宝宝", "小孩", "孩子", "婴儿", "新生儿"])
     scored: List[tuple[str, int]] = []
     for code, info in DEPARTMENT_TAXONOMY.items():
         if code == GENERAL_MEDICAL_DEPARTMENT:
             continue
         score = sum(1 for keyword in info.get("keywords", []) if str(keyword).lower() in q)
+        if code == "pediatrics" and pediatric_hint:
+            score += 2
         if score > 0:
             scored.append((code, score))
 

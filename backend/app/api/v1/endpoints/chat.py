@@ -12,7 +12,7 @@ from starlette.responses import StreamingResponse
 from app.api.v1.request_context import RequestContext, get_request_context
 from app.core.logging_config import logger
 from app.schemas.chat import ChatRequest, ChatResponse, WelcomeRequest, WelcomeResponse
-from app.services.chat_service import chat_service
+from app.services import chat_service
 from app.services.greeting_service import greeting_service
 
 router = APIRouter(tags=["Chat"])

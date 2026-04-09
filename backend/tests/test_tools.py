@@ -215,13 +215,18 @@ def test_vector_store_get_or_create():
     with patch('langchain_community.vectorstores.Chroma') as mock_chroma_cls:
         mock_vs = MagicMock()
         mock_vs._collection.count.return_value = 5
+        mock_vs._collection.get.return_value = {
+            "ids": ["doc-1"],
+            "metadatas": [{"department": "general_medical"}],
+        }
         mock_chroma_cls.return_value = mock_vs
 
         # Test loading existing
-        with patch('os.path.exists', return_value=True):
-            with patch('os.listdir', return_value=['chroma.sqlite3']):
-                res = get_or_create_vectorstore(persist_dir="fake")
-                assert res is not None
+        with patch('app.tools.vector_store._discover_knowledge_departments_on_disk', return_value=set()):
+            with patch('os.path.exists', return_value=True):
+                with patch('os.listdir', return_value=['chroma.sqlite3']):
+                    res = get_or_create_vectorstore(persist_dir="fake")
+                    assert res is not None
 
         vs_module._vectorstore = None
         # Test creation from docs
@@ -230,6 +235,102 @@ def test_vector_store_get_or_create():
                 res = get_or_create_vectorstore(documents=[MagicMock()], persist_dir="new")
                 assert res is not None
 
+    vs_module._vectorstore = None
+
+
+def test_vector_store_rebuilds_when_existing_store_is_corrupt():
+    vs_module._vectorstore = None
+
+    fake_doc = Document(page_content="medical knowledge", metadata={"department": "cardiology"})
+    rebuilt_vs = MagicMock()
+    rebuilt_vs._collection.count.return_value = 1
+
+    with patch("app.tools.vector_store.get_embeddings", return_value=MagicMock()):
+        with patch("langchain_community.vectorstores.Chroma") as mock_chroma_cls:
+            mock_chroma_cls.side_effect = Exception("file is not a database")
+            mock_chroma_cls.from_documents.return_value = rebuilt_vs
+            with patch("os.path.exists", return_value=True):
+                with patch("os.listdir", return_value=["chroma.sqlite3"]):
+                    with patch("shutil.rmtree") as mock_rmtree:
+                        res = get_or_create_vectorstore(
+                            documents=[fake_doc],
+                            persist_dir="corrupt_store",
+                        )
+
+    assert res is rebuilt_vs
+    mock_rmtree.assert_called_once_with("corrupt_store", ignore_errors=True)
+    mock_chroma_cls.from_documents.assert_called_once()
+    rebuilt_vs.persist.assert_called_once()
+    vs_module._vectorstore = None
+
+
+def test_vector_store_rebuilds_when_existing_store_is_empty():
+    vs_module._vectorstore = None
+
+    fake_doc = Document(page_content="general guidance", metadata={"department": "general_medical"})
+    empty_vs = MagicMock()
+    empty_vs._collection.count.return_value = 0
+    rebuilt_vs = MagicMock()
+    rebuilt_vs._collection.count.return_value = 1
+
+    with patch("app.tools.vector_store.get_embeddings", return_value=MagicMock()):
+        with patch("langchain_community.vectorstores.Chroma") as mock_chroma_cls:
+            mock_chroma_cls.return_value = empty_vs
+            mock_chroma_cls.from_documents.return_value = rebuilt_vs
+            with patch("os.path.exists", return_value=True):
+                with patch("os.listdir", return_value=["chroma.sqlite3"]):
+                    with patch("shutil.rmtree") as mock_rmtree:
+                        res = get_or_create_vectorstore(
+                            documents=[fake_doc],
+                            persist_dir="empty_store",
+                        )
+
+    assert res is rebuilt_vs
+    mock_rmtree.assert_called_once_with("empty_store", ignore_errors=True)
+    mock_chroma_cls.from_documents.assert_called_once()
+    rebuilt_vs.persist.assert_called_once()
+    vs_module._vectorstore = None
+
+
+def test_vector_store_rebuilds_when_department_coverage_is_incomplete():
+    vs_module._vectorstore = None
+
+    stale_vs = MagicMock()
+    stale_vs._collection.count.return_value = 5
+
+    def fake_collection_get(*args, **kwargs):
+        where = kwargs.get("where")
+        if where == {"department": "general_medical"}:
+            return {"ids": ["gm-1"], "metadatas": [{"department": "general_medical"}]}
+        if where == {"department": "infectious_disease"}:
+            return {"ids": [], "metadatas": []}
+        return {"ids": ["gm-1"], "metadatas": [{"department": "general_medical"}]}
+
+    stale_vs._collection.get.side_effect = fake_collection_get
+    rebuilt_doc = Document(
+        page_content="infectious disease guidance",
+        metadata={"department": "infectious_disease"},
+    )
+
+    with patch("app.tools.vector_store.get_embeddings", return_value=MagicMock()):
+        with patch("langchain_community.vectorstores.Chroma") as mock_chroma_cls:
+            mock_chroma_cls.return_value = stale_vs
+            with patch(
+                "app.tools.vector_store._discover_knowledge_departments_on_disk",
+                return_value={"general_medical", "infectious_disease"},
+            ):
+                with patch(
+                    "app.tools.vector_store._load_department_documents",
+                    return_value=[rebuilt_doc],
+                ):
+                    with patch("os.path.exists", return_value=True):
+                        with patch("os.listdir", return_value=["chroma.sqlite3"]):
+                            res = get_or_create_vectorstore(persist_dir="coverage_gap")
+
+    assert res is stale_vs
+    mock_chroma_cls.from_documents.assert_not_called()
+    stale_vs.add_documents.assert_called_once_with([rebuilt_doc])
+    stale_vs.persist.assert_called_once()
     vs_module._vectorstore = None
 
 

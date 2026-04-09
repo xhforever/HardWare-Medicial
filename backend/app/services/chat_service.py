@@ -4,8 +4,10 @@ ChatService: orchestrates the LangGraph agentic workflow for each chat message.
 """
 
 from datetime import datetime
+import time
 from typing import Any, AsyncGenerator, Dict
 import threading
+import sys
 
 from app.agents.executor import (
     build_executor_plan,
@@ -19,13 +21,14 @@ from app.agents.planner import KeywordRouterAgent
 from app.agents.query_rewriter import QueryRewriterAgent
 from app.agents.retriever import RetrieverAgent
 from app.agents.reranker import RerankerAgent
+from app.core.config import HISTORY_BOOTSTRAP_LIMIT
 from app.core.langgraph_workflow import create_workflow
 from app.core.logging_config import logger
 from app.core.medical_taxonomy import normalize_department_code
 from app.core.state import initialize_conversation_state, reset_query_state
 from app.services.database_service import db_service
 from app.services.flow_trace_service import append_flow_trace_record
-from app.tools.llm_client import get_llm
+from app.tools.llm_client import astream_with_metrics, get_llm
 
 
 class ChatService:
@@ -74,7 +77,7 @@ class ChatService:
             user_id=user_id,
         )
         restored = []
-        for item in history[-20:]:
+        for item in history[-HISTORY_BOOTSTRAP_LIMIT:]:
             record = {
                 "role": item.get("role", ""),
                 "content": item.get("content", ""),
@@ -158,6 +161,7 @@ class ChatService:
         selected_department: str | None = None,
     ) -> Dict[str, Any]:
         """Run the agentic pipeline for a single user message."""
+        started_at = time.perf_counter()
         logger.info(
             "Processing message tenant=%s user=%s session=%s...",
             tenant_id,
@@ -197,6 +201,7 @@ class ChatService:
         response_text = result.get("generation", "Unable to generate response.")
         source = result.get("source", "Unknown")
         flow_trace = result.get("flow_trace", [])
+        latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
 
         # Persist assistant response
         db_service.save_message(
@@ -217,6 +222,12 @@ class ChatService:
             primary_department=result.get("primary_department", "") or "",
             use_rag=bool(result.get("use_rag", False)),
             need_rag=bool(result.get("need_rag", False)),
+            rag_used=bool(result.get("rag_context")),
+            web_used=any(call.get("tool") == "web_search" for call in result.get("tool_calls", [])),
+            cache_hit=bool((result.get("cache_stats") or {}).get("hits", 0)),
+            summary_used=bool(result.get("summary_used", False)),
+            prompt_token_estimate=int(result.get("prompt_token_estimate", 0) or 0),
+            latency_ms=latency_ms,
         )
 
         return {
@@ -225,6 +236,8 @@ class ChatService:
             "timestamp": datetime.now().strftime("%I:%M %p"),
             "success": bool(result.get("generation")),
             "flow_trace": flow_trace,
+            "latency_ms": latency_ms,
+            "prompt_token_estimate": int(result.get("prompt_token_estimate", 0) or 0),
         }
 
     async def process_message_stream(
@@ -237,6 +250,7 @@ class ChatService:
         selected_department: str | None = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Run shared pre-processing and stream LLM tokens as they are generated."""
+        started_at = time.perf_counter()
         logger.info(
             "Streaming message tenant=%s user=%s session=%s...",
             tenant_id,
@@ -316,7 +330,12 @@ class ChatService:
             else:
                 try:
                     prompt = plan.get("prompt", "")
-                    async for chunk in llm.astream(prompt):
+                    async for chunk in astream_with_metrics(
+                        llm,
+                        prompt,
+                        node_name="executor",
+                        state=state,
+                    ):
                         delta = self._extract_chunk_text(chunk)
                         if not delta:
                             continue
@@ -361,6 +380,7 @@ class ChatService:
         state = MemoryWriteAsyncAgent(state)
         self._store_state(context_key, state)
         flow_trace = state.get("flow_trace", [])
+        latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
 
         db_service.save_message(
             session_id,
@@ -380,6 +400,12 @@ class ChatService:
             primary_department=state.get("primary_department", "") or "",
             use_rag=bool(state.get("use_rag", False)),
             need_rag=bool(state.get("need_rag", False)),
+            rag_used=bool(state.get("rag_context")),
+            web_used=any(call.get("tool") == "web_search" for call in state.get("tool_calls", [])),
+            cache_hit=bool((state.get("cache_stats") or {}).get("hits", 0)),
+            summary_used=bool(state.get("summary_used", False)),
+            prompt_token_estimate=int(state.get("prompt_token_estimate", 0) or 0),
+            latency_ms=latency_ms,
         )
         yield {
             "event": "done",
@@ -388,6 +414,8 @@ class ChatService:
             "source": source_info,
             "timestamp": datetime.now().strftime("%I:%M %p"),
             "flow_trace": flow_trace,
+            "latency_ms": latency_ms,
+            "prompt_token_estimate": int(state.get("prompt_token_estimate", 0) or 0),
         }
 
     def clear_conversation(
@@ -416,3 +444,8 @@ class ChatService:
 
 # Module-level singleton
 chat_service = ChatService()
+
+_services_pkg = sys.modules.get("app.services")
+if _services_pkg is not None:
+    setattr(_services_pkg, "ChatService", ChatService)
+    setattr(_services_pkg, "chat_service", chat_service)

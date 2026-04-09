@@ -6,6 +6,7 @@ OpenAI-compatible LLM client singleton.
 import json
 import os
 import threading
+import time
 from typing import Any, Dict
 
 from app.core.config import (
@@ -17,6 +18,7 @@ from app.core.config import (
     OPENAI_WIRE_API,
 )
 from app.core.logging_config import logger
+from app.services.token_budget_service import estimate_tokens
 
 _llm_instance = None
 _light_llm_instance = None
@@ -48,6 +50,127 @@ def coerce_response_text(response: Any) -> str:
     """Normalize LangChain response/chunk objects to plain text."""
     content = response.content if hasattr(response, "content") else response
     return _content_blocks_to_text(content)
+
+
+def _resolve_model_name(llm: Any, fallback: str = "") -> str:
+    for attr in ("model_name", "model"):
+        value = getattr(llm, attr, None)
+        if isinstance(value, str) and value.strip():
+            return value
+    return fallback
+
+
+def _record_llm_metric(
+    state: Dict[str, Any] | None,
+    *,
+    node_name: str,
+    model_name: str,
+    prompt: str,
+    output_text: str,
+    latency_ms: float,
+    success: bool,
+) -> None:
+    if state is None:
+        return
+    node_metrics = state.setdefault("node_metrics", {})
+    metric = node_metrics.setdefault(node_name, {})
+    metric.update(
+        {
+            "model": model_name,
+            "prompt_tokens": estimate_tokens(prompt, model=model_name),
+            "completion_tokens": estimate_tokens(output_text, model=model_name),
+            "latency_ms": round(latency_ms, 2),
+            "success": bool(success),
+        }
+    )
+    logger.info(
+        "LLM metrics node=%s model=%s prompt_tokens=%s completion_tokens=%s latency_ms=%.2f success=%s",
+        node_name,
+        metric["model"],
+        metric["prompt_tokens"],
+        metric["completion_tokens"],
+        metric["latency_ms"],
+        metric["success"],
+    )
+
+
+def invoke_with_metrics(
+    llm: Any,
+    prompt: str,
+    *,
+    node_name: str,
+    state: Dict[str, Any] | None = None,
+    fallback_model: str = "",
+):
+    start = time.perf_counter()
+    model_name = _resolve_model_name(llm, fallback=fallback_model)
+    try:
+        response = llm.invoke(prompt)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        output_text = coerce_response_text(response)
+        _record_llm_metric(
+            state,
+            node_name=node_name,
+            model_name=model_name,
+            prompt=prompt,
+            output_text=output_text,
+            latency_ms=elapsed_ms,
+            success=True,
+        )
+        return response
+    except Exception:
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        _record_llm_metric(
+            state,
+            node_name=node_name,
+            model_name=model_name,
+            prompt=prompt,
+            output_text="",
+            latency_ms=elapsed_ms,
+            success=False,
+        )
+        raise
+
+
+async def astream_with_metrics(
+    llm: Any,
+    prompt: str,
+    *,
+    node_name: str,
+    state: Dict[str, Any] | None = None,
+    fallback_model: str = "",
+):
+    start = time.perf_counter()
+    model_name = _resolve_model_name(llm, fallback=fallback_model)
+    parts: list[str] = []
+    try:
+        async for chunk in llm.astream(prompt):
+            text = coerce_response_text(chunk)
+            if text:
+                parts.append(text)
+            yield chunk
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        _record_llm_metric(
+            state,
+            node_name=node_name,
+            model_name=model_name,
+            prompt=prompt,
+            output_text="".join(parts),
+            latency_ms=elapsed_ms,
+            success=True,
+        )
+    except Exception:
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        _record_llm_metric(
+            state,
+            node_name=node_name,
+            model_name=model_name,
+            prompt=prompt,
+            output_text="".join(parts),
+            latency_ms=elapsed_ms,
+            success=False,
+        )
+        raise
 
 
 def _load_routing_config() -> Dict[str, Any]:

@@ -10,6 +10,7 @@ from langchain_core.documents import Document
 from app.core.logging_config import logger
 from app.core.medical_taxonomy import GENERAL_MEDICAL_DEPARTMENT, department_display_name
 from app.core.state import AgentState, append_flow_trace
+from app.services.cache_service import cache_service, record_cache_result
 from app.tools.vector_store import get_retriever
 
 
@@ -28,17 +29,29 @@ def _resolve_scopes(state: AgentState) -> list[str]:
 
     domain = state.get("domain", "general")
     if domain == "medical":
-        scopes = []
+        specialist_scopes = []
         primary_department = state.get("primary_department")
         if primary_department:
-            scopes.append(primary_department)
+            specialist_scopes.append(primary_department)
         for item in state.get("department_candidates", []):
             scope = item.get("name") if isinstance(item, dict) else None
-            if scope and scope not in scopes:
-                scopes.append(scope)
-        if GENERAL_MEDICAL_DEPARTMENT not in scopes:
+            if scope and scope not in specialist_scopes:
+                specialist_scopes.append(scope)
+
+        scopes = []
+        for scope in specialist_scopes:
+            if scope == GENERAL_MEDICAL_DEPARTMENT:
+                continue
+            scopes.append(scope)
+            if len(scopes) >= 3:
+                break
+
+        if primary_department == GENERAL_MEDICAL_DEPARTMENT and not scopes:
             scopes.append(GENERAL_MEDICAL_DEPARTMENT)
-        return scopes[:3]
+        elif GENERAL_MEDICAL_DEPARTMENT not in scopes:
+            scopes.append(GENERAL_MEDICAL_DEPARTMENT)
+
+        return scopes[:4]
 
     if state.get("use_rag") or state.get("need_rag"):
         return [domain]
@@ -68,9 +81,9 @@ def _scope_queries(state: AgentState, scope: str) -> list[str]:
 
 def _score_scope_k(scope: str, primary_department: str | None) -> int:
     if primary_department and scope == primary_department:
-        return 4
+        return 5
     if scope == GENERAL_MEDICAL_DEPARTMENT:
-        return 2
+        return 3
     return 2
 
 
@@ -80,6 +93,20 @@ def _doc_key(doc: Document) -> tuple:
         doc.page_content.strip(),
         metadata.get("source") or metadata.get("source_path"),
         metadata.get("page"),
+    )
+
+
+def _serialize_document(doc: Document) -> dict:
+    return {
+        "page_content": doc.page_content,
+        "metadata": doc.metadata or {},
+    }
+
+
+def _hydrate_document(payload: dict) -> Document:
+    return Document(
+        page_content=str(payload.get("page_content", "")),
+        metadata=payload.get("metadata") or {},
     )
 
 
@@ -97,6 +124,29 @@ def RetrieverAgent(state: AgentState) -> AgentState:
         state["rag_success"] = False
         state["rag_attempted"] = True
         return state
+
+    cache_key = cache_service.make_key(
+        "retriever",
+        {
+            "domain": domain,
+            "scopes": scopes,
+            "primary_department": state.get("primary_department"),
+            "queries": {scope: _scope_queries(state, scope) for scope in scopes},
+        },
+    )
+    cached = cache_service.get(cache_key)
+    if cached:
+        state["documents"] = [_hydrate_document(item) for item in cached.get("documents", [])]
+        state["merged_rag_context"] = cached.get("merged_rag_context", [])
+        state["retrieval_results_by_scope"] = cached.get("retrieval_results_by_scope", {})
+        state["rag_context"] = cached.get("rag_context", [])
+        state["rag_success"] = bool(state["merged_rag_context"])
+        state["rag_attempted"] = True
+        state["source"] = cached.get("source", "")
+        record_cache_result(state, "retriever", True)
+        logger.info("RAG: cache hit for scopes=%s", scopes)
+        return state
+    record_cache_result(state, "retriever", False)
 
     primary_department = state.get("primary_department")
     documents: list[Document] = []
@@ -154,6 +204,16 @@ def RetrieverAgent(state: AgentState) -> AgentState:
     if merged_rag_context:
         unique_scopes = [department_display_name(scope) for scope in scopes if retrieval_results_by_scope.get(scope)]
         state["source"] = " + ".join(unique_scopes) + " 知识库" if unique_scopes else "Medical Knowledge Base"
+        cache_service.set(
+            cache_key,
+            {
+                "documents": [_serialize_document(doc) for doc in documents],
+                "merged_rag_context": merged_rag_context,
+                "retrieval_results_by_scope": retrieval_results_by_scope,
+                "rag_context": state["rag_context"],
+                "source": state["source"],
+            },
+        )
         logger.info(
             "RAG: merged %d chunks across scopes=%s",
             len(merged_rag_context),

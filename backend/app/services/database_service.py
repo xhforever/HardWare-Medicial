@@ -4,6 +4,7 @@ DatabaseService: all CRUD operations for chat history.
 """
 
 import json
+import sys
 from typing import Dict, List, Optional
 
 from sqlalchemy import delete, desc, func, select, text
@@ -214,3 +215,8 @@ class DatabaseService:
 
 # Module-level singleton
 db_service = DatabaseService()
+
+_services_pkg = sys.modules.get("app.services")
+if _services_pkg is not None:
+    setattr(_services_pkg, "DatabaseService", DatabaseService)
+    setattr(_services_pkg, "db_service", db_service)

@@ -16,7 +16,12 @@ from app.core.medical_taxonomy import (
     normalize_department_code,
 )
 from app.core.state import AgentState, append_flow_trace
-from app.tools.llm_client import coerce_response_text, get_light_llm
+from app.services.cache_service import cache_service, record_cache_result
+from app.tools.llm_client import (
+    coerce_response_text,
+    get_light_llm,
+    invoke_with_metrics,
+)
 
 
 def _extract_json_block(text: str) -> str:
@@ -82,6 +87,29 @@ def MedicalRouterAgent(state: AgentState) -> AgentState:
     department_candidates = fallback_candidates
     routing_reason = "heuristic keyword fallback"
 
+    cache_key = cache_service.make_key(
+        "medical_router",
+        {
+            "tenant_id": state.get("tenant_id", "default"),
+            "user_id": state.get("user_id", "anonymous"),
+            "question": question,
+        },
+    )
+    cached = cache_service.get(cache_key)
+    if cached:
+        state["primary_department"] = cached.get("primary_department", fallback_primary)
+        state["department_candidates"] = cached.get("department_candidates", fallback_candidates)
+        state["routing_reason"] = cached.get("routing_reason", routing_reason)
+        state["current_tool"] = "query_rewriter"
+        record_cache_result(state, "medical_router", True)
+        logger.info(
+            "MedicalRouter: cache hit primary=%s candidates=%s",
+            state["primary_department"],
+            [item["name"] for item in state["department_candidates"]],
+        )
+        return state
+    record_cache_result(state, "medical_router", False)
+
     llm = get_light_llm(
         tenant_id=state.get("tenant_id", "default"),
         user_id=state.get("user_id", "anonymous"),
@@ -101,7 +129,12 @@ def MedicalRouterAgent(state: AgentState) -> AgentState:
             f"用户问题：{question[:1200]}\n"
         )
         try:
-            raw = llm.invoke(prompt)
+            raw = invoke_with_metrics(
+                llm,
+                prompt,
+                node_name="medical_router",
+                state=state,
+            )
             content = coerce_response_text(raw)
             parsed = json.loads(_extract_json_block(content))
             primary = normalize_department_code(parsed.get("primary_department"))
@@ -114,6 +147,14 @@ def MedicalRouterAgent(state: AgentState) -> AgentState:
             elif department_candidates:
                 primary_department = department_candidates[0]["name"]
             routing_reason = str(parsed.get("routing_reason") or routing_reason)
+            cache_service.set(
+                cache_key,
+                {
+                    "primary_department": primary_department,
+                    "department_candidates": department_candidates,
+                    "routing_reason": routing_reason,
+                },
+            )
         except Exception as exc:
             logger.warning("MedicalRouter fallback used: %s", exc)
 

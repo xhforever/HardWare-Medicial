@@ -1,0 +1,761 @@
+[
+  {
+    "case_id": "gm_anemia_001",
+    "knowledge_scope": "general_medical",
+    "source_file": "backend/data/knowledge/medical/general_medical_通用医疗/medical_book.pdf",
+    "source_page_hint": 734,
+    "source_topic": "Folic acid deficiency anemia",
+    "source_excerpt": "Folic acid deficiency ... results in anemia characterized by red blood cells that are large in size but few in number.",
+    "user_query": "体检提示叶酸缺乏性贫血（folic acid deficiency anemia），最近头晕乏力，想查相关资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "general_medical",
+    "gold_retrieval_queries": [
+      "叶酸缺乏性贫血 folic acid deficiency anemia 头晕 乏力",
+      "贫血 anemia 头晕 乏力"
+    ],
+    "must_keep_terms": [
+      "叶酸缺乏性贫血",
+      "anemia",
+      "头晕",
+      "乏力"
+    ],
+    "required_department_query_terms": [
+      "叶酸缺乏性贫血",
+      "anemia"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "gm_migraine_002",
+    "knowledge_scope": "general_medical",
+    "source_file": "backend/data/knowledge/medical/general_medical_通用医疗/medical_book.pdf",
+    "source_page_hint": 14,
+    "source_topic": "Migraine headache",
+    "source_excerpt": "pain relievers or medicines for treating migraine headache",
+    "user_query": "最近偏头痛反复发作，一侧头痛还怕光，想检索资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "general_medical",
+    "gold_retrieval_queries": [
+      "偏头痛 一侧头痛 怕光",
+      "头痛 怕光 偏头痛"
+    ],
+    "must_keep_terms": [
+      "偏头痛",
+      "头痛",
+      "怕光"
+    ],
+    "required_department_query_terms": [
+      "偏头痛",
+      "头痛"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "gm_hypertension_003",
+    "knowledge_scope": "general_medical",
+    "source_file": "backend/data/knowledge/medical/general_medical_通用医疗/medical_book.pdf",
+    "source_page_hint": 18,
+    "source_topic": "Hypertension",
+    "source_excerpt": "Drug Update: Calcium Channel Blockers For Hypertension",
+    "user_query": "最近血压总在150/95左右，担心高血压（hypertension），想查资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "general_medical",
+    "gold_retrieval_queries": [
+      "高血压 hypertension 血压 150 95",
+      "hypertension 血压偏高"
+    ],
+    "must_keep_terms": [
+      "高血压",
+      "hypertension",
+      "血压"
+    ],
+    "required_department_query_terms": [
+      "高血压",
+      "hypertension"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "gm_diabetes_004",
+    "knowledge_scope": "general_medical",
+    "source_file": "backend/data/knowledge/medical/general_medical_通用医疗/medical_book.pdf",
+    "source_page_hint": 40,
+    "source_topic": "Diabetes",
+    "source_excerpt": "National Institute of Diabetes and Digestive and Kidney Disease",
+    "user_query": "空腹血糖高，医生怀疑糖尿病，最近多饮多尿，想找资料",
+    "rewrite_mode": "manual_fast_path",
+    "expected_scope": "general_medical",
+    "gold_retrieval_queries": [
+      "糖尿病 血糖高 多饮 多尿",
+      "血糖高 多饮 多尿 糖尿病"
+    ],
+    "must_keep_terms": [
+      "糖尿病",
+      "血糖高",
+      "多饮",
+      "多尿"
+    ],
+    "required_department_query_terms": [
+      "糖尿病",
+      "多饮"
+    ],
+    "expected_rewrite_reason": "manual department fast-path"
+  },
+  {
+    "case_id": "gm_asthma_005",
+    "knowledge_scope": "general_medical",
+    "source_file": "backend/data/knowledge/medical/general_medical_通用医疗/medical_book.pdf",
+    "source_page_hint": 134,
+    "source_topic": "Asthma",
+    "source_excerpt": "acute asthma ... pulmonary embolism ... chest physical therapy",
+    "user_query": "换季后哮喘老发作，咳嗽喘鸣胸闷，想检索处理资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "general_medical",
+    "gold_retrieval_queries": [
+      "哮喘 咳嗽 喘鸣 胸闷",
+      "胸闷 咳嗽 哮喘"
+    ],
+    "must_keep_terms": [
+      "哮喘",
+      "咳嗽",
+      "胸闷"
+    ],
+    "required_department_query_terms": [
+      "哮喘",
+      "胸闷"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "gm_eczema_006",
+    "knowledge_scope": "general_medical",
+    "source_file": "backend/data/knowledge/medical/general_medical_通用医疗/medical_book.pdf",
+    "source_page_hint": 299,
+    "source_topic": "Eczema",
+    "source_excerpt": "Eczema, Psoriasis, Cutaneous Infections, Acne, and Other Common Skin Disorders",
+    "user_query": "手臂湿疹反复发痒起红疹，想查相关资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "general_medical",
+    "gold_retrieval_queries": [
+      "湿疹 发痒 红疹",
+      "湿疹 瘙痒 红疹"
+    ],
+    "must_keep_terms": [
+      "湿疹",
+      "发痒",
+      "红疹"
+    ],
+    "required_department_query_terms": [
+      "湿疹",
+      "红疹"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "gm_cataract_007",
+    "knowledge_scope": "general_medical",
+    "source_file": "backend/data/knowledge/medical/general_medical_通用医疗/medical_book.pdf",
+    "source_page_hint": 60,
+    "source_topic": "Cataract surgery",
+    "source_excerpt": "Cataract surgery is a procedure performed to remove a cloudy lens from the eye",
+    "user_query": "老人白内障相关资料怎么查，最近视物模糊越来越明显",
+    "rewrite_mode": "manual_fast_path",
+    "expected_scope": "general_medical",
+    "gold_retrieval_queries": [
+      "白内障 视物模糊",
+      "老人 白内障 视物模糊"
+    ],
+    "must_keep_terms": [
+      "白内障",
+      "视物模糊"
+    ],
+    "required_department_query_terms": [
+      "白内障",
+      "视物模糊"
+    ],
+    "expected_rewrite_reason": "manual department fast-path"
+  },
+  {
+    "case_id": "gm_kidney_stones_008",
+    "knowledge_scope": "general_medical",
+    "source_file": "backend/data/knowledge/medical/general_medical_通用医疗/medical_book.pdf",
+    "source_page_hint": 164,
+    "source_topic": "Kidney stones",
+    "source_excerpt": "small solid objects such as gallstones, kidney stones",
+    "user_query": "怀疑肾结石（kidney stones），最近腰痛伴血尿，想检索资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "general_medical",
+    "gold_retrieval_queries": [
+      "肾结石 kidney stones 腰痛 血尿",
+      "kidney stones 血尿 腰痛"
+    ],
+    "must_keep_terms": [
+      "肾结石",
+      "kidney",
+      "stones",
+      "腰痛",
+      "血尿"
+    ],
+    "required_department_query_terms": [
+      "肾结石",
+      "kidney"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "gm_otitis_media_009",
+    "knowledge_scope": "general_medical",
+    "source_file": "backend/data/knowledge/medical/general_medical_通用医疗/medical_book.pdf",
+    "source_page_hint": 99,
+    "source_topic": "Otitis media",
+    "source_excerpt": "history of chronic otitis media (inflammation of the middle ear)",
+    "user_query": "家人中耳炎后耳痛耳闷，听力也下降，想查资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "general_medical",
+    "gold_retrieval_queries": [
+      "中耳炎 耳痛 耳闷 听力下降",
+      "耳痛 耳闷 中耳炎"
+    ],
+    "must_keep_terms": [
+      "中耳炎",
+      "耳痛",
+      "耳闷"
+    ],
+    "required_department_query_terms": [
+      "中耳炎",
+      "耳痛"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "gm_uti_010",
+    "knowledge_scope": "general_medical",
+    "source_file": "backend/data/knowledge/medical/general_medical_通用医疗/medical_book.pdf",
+    "source_page_hint": 30,
+    "source_topic": "Urinary tract infection",
+    "source_excerpt": "infections like herpes, pneumonia, urinary tract infections, and wound abscess",
+    "user_query": "医生说可能是泌尿道感染，最近尿频尿急尿痛，想找资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "general_medical",
+    "gold_retrieval_queries": [
+      "泌尿道感染 尿频 尿急 尿痛",
+      "尿频 尿痛 泌尿道感染"
+    ],
+    "must_keep_terms": [
+      "泌尿道感染",
+      "尿频",
+      "尿急",
+      "尿痛"
+    ],
+    "required_department_query_terms": [
+      "泌尿道感染",
+      "尿频"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "ped_pneumonia_nonsevere_011",
+    "knowledge_scope": "pediatrics",
+    "source_file": "backend/data/knowledge/departments/pediatrics_儿科/WHO_Pocket_Book_of_Hospital_Care_for_Children.pdf",
+    "source_page_hint": 2,
+    "source_topic": "Pneumonia, non-severe",
+    "source_excerpt": "Pneumonia, non-severe (p. 86)",
+    "user_query": "孩子可能是普通肺炎，发热咳嗽但还能喝水，想按儿科资料检索",
+    "rewrite_mode": "manual_fast_path",
+    "expected_scope": "pediatrics",
+    "gold_retrieval_queries": [
+      "儿科 普通肺炎 发热 咳嗽",
+      "儿科 肺炎 发热 咳嗽"
+    ],
+    "must_keep_terms": [
+      "肺炎",
+      "发热",
+      "咳嗽"
+    ],
+    "required_department_query_terms": [
+      "儿科",
+      "肺炎"
+    ],
+    "expected_rewrite_reason": "manual department fast-path"
+  },
+  {
+    "case_id": "ped_pneumonia_severe_012",
+    "knowledge_scope": "pediatrics",
+    "source_file": "backend/data/knowledge/departments/pediatrics_儿科/WHO_Pocket_Book_of_Hospital_Care_for_Children.pdf",
+    "source_page_hint": 2,
+    "source_topic": "Pneumonia, severe",
+    "source_excerpt": "Pneumonia, severe (p. 82)",
+    "user_query": "小孩重症肺炎（severe pneumonia）风险高吗，发热咳嗽还呼吸快，想检索儿科资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "pediatrics",
+    "gold_retrieval_queries": [
+      "儿科 severe pneumonia 发热 呼吸快",
+      "儿科 重症肺炎 发热 呼吸快"
+    ],
+    "must_keep_terms": [
+      "重症肺炎",
+      "pneumonia",
+      "发热",
+      "呼吸快"
+    ],
+    "required_department_query_terms": [
+      "儿科",
+      "pneumonia"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "ped_diarrhoea_013",
+    "knowledge_scope": "pediatrics",
+    "source_file": "backend/data/knowledge/departments/pediatrics_儿科/WHO_Pocket_Book_of_Hospital_Care_for_Children.pdf",
+    "source_page_hint": 8,
+    "source_topic": "Acute diarrhoea",
+    "source_excerpt": "5.2 acute diarrhoea 127",
+    "user_query": "宝宝急性腹泻，一天拉很多次，想按儿科知识库检索",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "pediatrics",
+    "gold_retrieval_queries": [
+      "儿科 急性腹泻 宝宝",
+      "儿科 腹泻 宝宝"
+    ],
+    "must_keep_terms": [
+      "急性腹泻",
+      "宝宝"
+    ],
+    "required_department_query_terms": [
+      "儿科",
+      "腹泻"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "ped_dehydration_014",
+    "knowledge_scope": "pediatrics",
+    "source_file": "backend/data/knowledge/departments/pediatrics_儿科/WHO_Pocket_Book_of_Hospital_Care_for_Children.pdf",
+    "source_page_hint": 5,
+    "source_topic": "Severe dehydration",
+    "source_excerpt": "treat severe dehydration in an emergency setting",
+    "user_query": "孩子腹泻后口干眼窝凹，担心脱水，想检索儿科资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "pediatrics",
+    "gold_retrieval_queries": [
+      "儿科 脱水 腹泻 口干 眼窝凹",
+      "儿科 脱水 腹泻"
+    ],
+    "must_keep_terms": [
+      "脱水",
+      "腹泻",
+      "口干",
+      "眼窝"
+    ],
+    "required_department_query_terms": [
+      "儿科",
+      "脱水"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "ped_meningitis_015",
+    "knowledge_scope": "pediatrics",
+    "source_file": "backend/data/knowledge/departments/pediatrics_儿科/WHO_Pocket_Book_of_Hospital_Care_for_Children.pdf",
+    "source_page_hint": 9,
+    "source_topic": "Meningitis",
+    "source_excerpt": "6.3 meningitis 169",
+    "user_query": "孩子高热伴颈部发硬，担心脑膜炎（meningitis），想按儿科资料检索",
+    "rewrite_mode": "manual_fast_path",
+    "expected_scope": "pediatrics",
+    "gold_retrieval_queries": [
+      "儿科 meningitis 高热 颈部发硬",
+      "儿科 脑膜炎 高热 颈部发硬"
+    ],
+    "must_keep_terms": [
+      "脑膜炎",
+      "meningitis",
+      "高热",
+      "颈部发硬"
+    ],
+    "required_department_query_terms": [
+      "儿科",
+      "meningitis"
+    ],
+    "expected_rewrite_reason": "manual department fast-path"
+  },
+  {
+    "case_id": "ped_measles_016",
+    "knowledge_scope": "pediatrics",
+    "source_file": "backend/data/knowledge/departments/pediatrics_儿科/WHO_Pocket_Book_of_Hospital_Care_for_Children.pdf",
+    "source_page_hint": 9,
+    "source_topic": "Measles",
+    "source_excerpt": "6.4 measles 174",
+    "user_query": "宝宝出麻疹后还发热咳嗽，想检索儿科资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "pediatrics",
+    "gold_retrieval_queries": [
+      "儿科 麻疹 出疹 发热 咳嗽",
+      "儿科 麻疹 发热 咳嗽"
+    ],
+    "must_keep_terms": [
+      "麻疹",
+      "发热",
+      "咳嗽"
+    ],
+    "required_department_query_terms": [
+      "儿科",
+      "麻疹"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "ped_otitis_media_017",
+    "knowledge_scope": "pediatrics",
+    "source_file": "backend/data/knowledge/departments/pediatrics_儿科/WHO_Pocket_Book_of_Hospital_Care_for_Children.pdf",
+    "source_page_hint": 9,
+    "source_topic": "Acute otitis media",
+    "source_excerpt": "6.7.2 acute otitis media 183",
+    "user_query": "孩子急性中耳炎（acute otitis media），耳痛哭闹睡不好，想查儿科资料",
+    "rewrite_mode": "manual_fast_path",
+    "expected_scope": "pediatrics",
+    "gold_retrieval_queries": [
+      "儿科 acute otitis media 耳痛 哭闹",
+      "儿科 中耳炎 耳痛 哭闹"
+    ],
+    "must_keep_terms": [
+      "中耳炎",
+      "otitis",
+      "media",
+      "耳痛",
+      "哭闹"
+    ],
+    "required_department_query_terms": [
+      "儿科",
+      "otitis"
+    ],
+    "expected_rewrite_reason": "manual department fast-path"
+  },
+  {
+    "case_id": "ped_mastoiditis_018",
+    "knowledge_scope": "pediatrics",
+    "source_file": "backend/data/knowledge/departments/pediatrics_儿科/WHO_Pocket_Book_of_Hospital_Care_for_Children.pdf",
+    "source_page_hint": 9,
+    "source_topic": "Mastoiditis",
+    "source_excerpt": "6.7.1 mastoiditis 182",
+    "user_query": "孩子耳后红肿突起，担心乳突炎，想检索儿科资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "pediatrics",
+    "gold_retrieval_queries": [
+      "儿科 乳突炎 耳后红肿",
+      "儿科 耳后红肿 乳突炎"
+    ],
+    "must_keep_terms": [
+      "乳突炎",
+      "耳后",
+      "红肿"
+    ],
+    "required_department_query_terms": [
+      "儿科",
+      "乳突炎"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "ped_asthma_019",
+    "knowledge_scope": "pediatrics",
+    "source_file": "backend/data/knowledge/departments/pediatrics_儿科/WHO_Pocket_Book_of_Hospital_Care_for_Children.pdf",
+    "source_page_hint": 8,
+    "source_topic": "Asthma",
+    "source_excerpt": "4.5.2 asthma 96",
+    "user_query": "儿童哮喘夜间喘息明显，咳嗽反复，想查儿科资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "pediatrics",
+    "gold_retrieval_queries": [
+      "儿科 哮喘 喘息 咳嗽 夜间",
+      "儿科 哮喘 咳嗽 喘息"
+    ],
+    "must_keep_terms": [
+      "哮喘",
+      "喘息",
+      "咳嗽"
+    ],
+    "required_department_query_terms": [
+      "儿科",
+      "哮喘"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "ped_malnutrition_020",
+    "knowledge_scope": "pediatrics",
+    "source_file": "backend/data/knowledge/departments/pediatrics_儿科/WHO_Pocket_Book_of_Hospital_Care_for_Children.pdf",
+    "source_page_hint": 5,
+    "source_topic": "Severe malnutrition",
+    "source_excerpt": "emergency treatment for a child with severe malnutrition",
+    "user_query": "孩子重度营养不良，体重不增食欲差，想按儿科资料检索",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "pediatrics",
+    "gold_retrieval_queries": [
+      "儿科 重度营养不良 体重不增 食欲差",
+      "儿科 营养不良 体重不增 食欲差"
+    ],
+    "must_keep_terms": [
+      "营养不良",
+      "体重不增",
+      "食欲差"
+    ],
+    "required_department_query_terms": [
+      "儿科",
+      "营养不良"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "inf_hiv_021",
+    "knowledge_scope": "infectious_disease",
+    "source_file": "backend/data/knowledge/departments/infectious_disease_感染科/Major_Infectious_Diseases_3rd_edition.pdf",
+    "source_page_hint": 11,
+    "source_topic": "Global Mortality and Morbidity of HIV/AIDS",
+    "source_excerpt": "PART 1 HIV/AIDS AND OTHER SEXUALLY TRANSMITTED INFECTIONS",
+    "user_query": "筛查提示 HIV 阳性，想了解后续评估和感染科相关资料",
+    "rewrite_mode": "manual_fast_path",
+    "expected_scope": "infectious_disease",
+    "gold_retrieval_queries": [
+      "感染科 HIV 阳性 后续评估",
+      "HIV 阳性 后续评估"
+    ],
+    "must_keep_terms": [
+      "hiv",
+      "阳性",
+      "评估"
+    ],
+    "required_department_query_terms": [
+      "感染科",
+      "HIV"
+    ],
+    "expected_rewrite_reason": "manual department fast-path"
+  },
+  {
+    "case_id": "inf_mtct_022",
+    "knowledge_scope": "infectious_disease",
+    "source_file": "backend/data/knowledge/departments/infectious_disease_感染科/Major_Infectious_Diseases_3rd_edition.pdf",
+    "source_page_hint": 19,
+    "source_topic": "MTCT",
+    "source_excerpt": "MTCT mother-to-child transmission",
+    "user_query": "孕期 HIV，担心母婴传播（mother-to-child transmission）风险，想检索感染科资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "infectious_disease",
+    "gold_retrieval_queries": [
+      "感染科 HIV mother to child transmission 孕期",
+      "感染科 母婴传播 HIV 孕期"
+    ],
+    "must_keep_terms": [
+      "hiv",
+      "母婴传播",
+      "mother",
+      "child",
+      "transmission",
+      "孕期"
+    ],
+    "required_department_query_terms": [
+      "感染科",
+      "HIV"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "inf_sti_023",
+    "knowledge_scope": "infectious_disease",
+    "source_file": "backend/data/knowledge/departments/infectious_disease_感染科/Major_Infectious_Diseases_3rd_edition.pdf",
+    "source_page_hint": 12,
+    "source_topic": "Sexually Transmitted Infections",
+    "source_excerpt": "Sexually Transmitted Infections: Impact and Cost-Effectiveness of Prevention",
+    "user_query": "无保护性行为后担心性传播感染，想检索感染科资料",
+    "rewrite_mode": "manual_fast_path",
+    "expected_scope": "infectious_disease",
+    "gold_retrieval_queries": [
+      "感染科 性传播感染",
+      "感染科 性传播疾病"
+    ],
+    "must_keep_terms": [
+      "性传播感染"
+    ],
+    "required_department_query_terms": [
+      "感染科",
+      "性传播感染"
+    ],
+    "expected_rewrite_reason": "manual department fast-path"
+  },
+  {
+    "case_id": "inf_tuberculosis_024",
+    "knowledge_scope": "infectious_disease",
+    "source_file": "backend/data/knowledge/departments/infectious_disease_感染科/Major_Infectious_Diseases_3rd_edition.pdf",
+    "source_page_hint": 12,
+    "source_topic": "Tuberculosis",
+    "source_excerpt": "11. Tuberculosis 233",
+    "user_query": "咳嗽盗汗消瘦，怀疑结核（tuberculosis），想按感染科资料检索",
+    "rewrite_mode": "manual_fast_path",
+    "expected_scope": "infectious_disease",
+    "gold_retrieval_queries": [
+      "感染科 tuberculosis 咳嗽 盗汗 消瘦",
+      "感染科 结核 咳嗽 盗汗 消瘦"
+    ],
+    "must_keep_terms": [
+      "结核",
+      "tuberculosis",
+      "咳嗽",
+      "盗汗",
+      "消瘦"
+    ],
+    "required_department_query_terms": [
+      "感染科",
+      "tuberculosis"
+    ],
+    "expected_rewrite_reason": "manual department fast-path"
+  },
+  {
+    "case_id": "inf_malaria_025",
+    "knowledge_scope": "infectious_disease",
+    "source_file": "backend/data/knowledge/departments/infectious_disease_感染科/Major_Infectious_Diseases_3rd_edition.pdf",
+    "source_page_hint": 16,
+    "source_topic": "Malaria",
+    "source_excerpt": "estimated 429,000 people died from malaria",
+    "user_query": "旅行后高热寒战，担心疟疾，想检索感染科资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "infectious_disease",
+    "gold_retrieval_queries": [
+      "感染科 疟疾 高热 寒战 旅行后",
+      "感染科 疟疾 高热 寒战"
+    ],
+    "must_keep_terms": [
+      "疟疾",
+      "高热",
+      "寒战"
+    ],
+    "required_department_query_terms": [
+      "感染科",
+      "疟疾"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "inf_hepatitis_b_026",
+    "knowledge_scope": "infectious_disease",
+    "source_file": "backend/data/knowledge/departments/infectious_disease_感染科/Major_Infectious_Diseases_3rd_edition.pdf",
+    "source_page_hint": 18,
+    "source_topic": "HBV",
+    "source_excerpt": "HBV hepatitis B virus",
+    "user_query": "体检提示乙肝表面抗原（hepatitis B surface antigen）阳性，想检索感染科资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "infectious_disease",
+    "gold_retrieval_queries": [
+      "感染科 hepatitis b surface antigen 阳性",
+      "感染科 乙肝表面抗原 阳性"
+    ],
+    "must_keep_terms": [
+      "乙肝表面抗原",
+      "hepatitis",
+      "阳性"
+    ],
+    "required_department_query_terms": [
+      "感染科",
+      "hepatitis"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "inf_hepatitis_c_027",
+    "knowledge_scope": "infectious_disease",
+    "source_file": "backend/data/knowledge/departments/infectious_disease_感染科/Major_Infectious_Diseases_3rd_edition.pdf",
+    "source_page_hint": 18,
+    "source_topic": "HCV",
+    "source_excerpt": "HCV hepatitis C virus",
+    "user_query": "既往输血史，担心丙型肝炎感染，想检索感染科资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "infectious_disease",
+    "gold_retrieval_queries": [
+      "感染科 丙型肝炎 感染 输血史",
+      "感染科 丙肝 输血史"
+    ],
+    "must_keep_terms": [
+      "丙型肝炎",
+      "感染",
+      "输血史"
+    ],
+    "required_department_query_terms": [
+      "感染科",
+      "丙型肝炎"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "inf_drug_resistant_028",
+    "knowledge_scope": "infectious_disease",
+    "source_file": "backend/data/knowledge/departments/infectious_disease_感染科/Major_Infectious_Diseases_3rd_edition.pdf",
+    "source_page_hint": 13,
+    "source_topic": "Drug-Resistant Infections",
+    "source_excerpt": "18. Drug-Resistant Infections 433",
+    "user_query": "培养提示耐药性感染，想检索耐药感染相关资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "infectious_disease",
+    "gold_retrieval_queries": [
+      "耐药性感染 耐药",
+      "耐药感染"
+    ],
+    "must_keep_terms": [
+      "耐药性感染",
+      "耐药"
+    ],
+    "required_department_query_terms": [
+      "感染科",
+      "耐药"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "inf_diarrheal_029",
+    "knowledge_scope": "infectious_disease",
+    "source_file": "backend/data/knowledge/departments/infectious_disease_感染科/Major_Infectious_Diseases_3rd_edition.pdf",
+    "source_page_hint": 15,
+    "source_topic": "Diarrheal diseases",
+    "source_excerpt": "fewer children and adults die from malaria, diarrheal diseases, and lower respiratory infections",
+    "user_query": "社区里急性腹泻增多，想了解腹泻性疾病风险和感染科资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "infectious_disease",
+    "gold_retrieval_queries": [
+      "感染科 腹泻性疾病 急性腹泻",
+      "感染科 急性腹泻 风险"
+    ],
+    "must_keep_terms": [
+      "腹泻",
+      "腹泻性疾病"
+    ],
+    "required_department_query_terms": [
+      "感染科",
+      "腹泻"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  },
+  {
+    "case_id": "inf_lri_030",
+    "knowledge_scope": "infectious_disease",
+    "source_file": "backend/data/knowledge/departments/infectious_disease_感染科/Major_Infectious_Diseases_3rd_edition.pdf",
+    "source_page_hint": 16,
+    "source_topic": "Lower respiratory infections",
+    "source_excerpt": "Lower respiratory infections remain a major persistent cause of death in children",
+    "user_query": "高热咳痰呼吸急，担心下呼吸道感染，想检索感染科资料",
+    "rewrite_mode": "heuristic",
+    "expected_scope": "infectious_disease",
+    "gold_retrieval_queries": [
+      "感染科 下呼吸道感染 高热 咳痰 呼吸急",
+      "感染科 呼吸道感染 高热 咳痰"
+    ],
+    "must_keep_terms": [
+      "下呼吸道感染",
+      "高热",
+      "咳痰"
+    ],
+    "required_department_query_terms": [
+      "感染科",
+      "下呼吸道感染"
+    ],
+    "expected_rewrite_reason": "heuristic keyword normalization (llm disabled)"
+  }
+]

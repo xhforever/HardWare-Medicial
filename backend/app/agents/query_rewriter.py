@@ -15,7 +15,38 @@ from app.core.medical_taxonomy import (
     extract_query_terms,
 )
 from app.core.state import AgentState, append_flow_trace
-from app.tools.llm_client import coerce_response_text, get_light_llm
+from app.services.cache_service import cache_service, record_cache_result
+from app.tools.llm_client import (
+    coerce_response_text,
+    get_light_llm,
+    invoke_with_metrics,
+)
+
+MEDICAL_QUERY_EXPANSIONS = {
+    "偏头痛": ["migraine"],
+    "糖尿病": ["diabetes"],
+    "哮喘": ["asthma"],
+    "肺炎": ["pneumonia"],
+    "重症肺炎": ["severe pneumonia"],
+    "腹泻": ["diarrhoea", "diarrhea"],
+    "急性腹泻": ["acute diarrhoea", "acute diarrhea"],
+    "腹泻性疾病": ["diarrheal diseases"],
+    "麻疹": ["measles"],
+    "乳突炎": ["mastoiditis"],
+    "中耳炎": ["otitis media"],
+    "脑膜炎": ["meningitis"],
+    "泌尿道感染": ["urinary tract infection", "uti"],
+    "尿路感染": ["urinary tract infection", "uti"],
+    "丙型肝炎": ["hepatitis c", "hcv"],
+    "丙肝": ["hepatitis c", "hcv"],
+    "乙肝": ["hepatitis b", "hbv"],
+    "疟疾": ["malaria"],
+    "结核": ["tuberculosis"],
+    "艾滋": ["hiv"],
+    "hiv": ["aids"],
+    "性传播感染": ["sexually transmitted infection", "sti"],
+    "性传播": ["sexually transmitted infection", "sti"],
+}
 
 
 def _extract_json_block(text: str) -> str:
@@ -26,13 +57,30 @@ def _extract_json_block(text: str) -> str:
     return text[start : end + 1]
 
 
+def _expand_cross_lingual_terms(question: str, terms: list[str]) -> list[str]:
+    expanded_terms = list(terms)
+    seen = set(expanded_terms)
+    lowered_question = (question or "").lower()
+
+    for trigger, expansions in MEDICAL_QUERY_EXPANSIONS.items():
+        if trigger.lower() not in lowered_question:
+            continue
+        for expansion in expansions:
+            for token in extract_query_terms(expansion):
+                if token in seen:
+                    continue
+                seen.add(token)
+                expanded_terms.append(token)
+    return expanded_terms
+
+
 def _fallback_retrieval_query(question: str, scope: str | None = None) -> str:
-    terms = extract_query_terms(question)
+    terms = _expand_cross_lingual_terms(question, extract_query_terms(question))
     if scope and scope != GENERAL_MEDICAL_DEPARTMENT:
         terms.insert(0, department_display_name(scope))
     if not terms:
         return question.strip()
-    return " ".join(terms[:12])
+    return " ".join(terms[:16])
 
 
 def QueryRewriterAgent(state: AgentState) -> AgentState:
@@ -110,6 +158,31 @@ def QueryRewriterAgent(state: AgentState) -> AgentState:
         tenant_id=state.get("tenant_id", "default"),
         user_id=state.get("user_id", "anonymous"),
     )
+    cache_key = cache_service.make_key(
+        "query_rewriter",
+        {
+            "tenant_id": state.get("tenant_id", "default"),
+            "user_id": state.get("user_id", "anonymous"),
+            "question": question,
+            "domain": domain,
+            "scopes": scopes,
+            "candidate_departments": candidate_departments,
+        },
+    )
+    cached = cache_service.get(cache_key)
+    if cached:
+        state["retrieval_query"] = cached.get("retrieval_query", fallback_query)
+        state["department_queries"] = cached.get("department_queries", fallback_department_queries)
+        state["rewrite_reason"] = cached.get("rewrite_reason", rewrite_reason)
+        record_cache_result(state, "query_rewriter", True)
+        logger.info(
+            "QueryRewriter: cache hit, retrieval_query=%s scopes=%s",
+            state["retrieval_query"][:80],
+            list(state["department_queries"].keys()),
+        )
+        return state
+    record_cache_result(state, "query_rewriter", False)
+
     if llm and scopes:
         prompt = (
             "你负责把用户问题改写成更适合医疗检索的查询语句。\n"
@@ -124,7 +197,12 @@ def QueryRewriterAgent(state: AgentState) -> AgentState:
             f"用户问题：{question[:1200]}\n"
         )
         try:
-            raw = llm.invoke(prompt)
+            raw = invoke_with_metrics(
+                llm,
+                prompt,
+                node_name="query_rewriter",
+                state=state,
+            )
             content = coerce_response_text(raw)
             parsed = json.loads(_extract_json_block(content))
             retrieval_query = (
@@ -136,6 +214,14 @@ def QueryRewriterAgent(state: AgentState) -> AgentState:
                 if candidate:
                     department_queries[scope] = str(candidate).strip()
             rewrite_reason = str(parsed.get("rewrite_reason") or rewrite_reason)
+            cache_service.set(
+                cache_key,
+                {
+                    "retrieval_query": retrieval_query,
+                    "department_queries": department_queries,
+                    "rewrite_reason": rewrite_reason,
+                },
+            )
         except Exception as exc:
             logger.warning("QueryRewriter fallback used: %s", exc)
 

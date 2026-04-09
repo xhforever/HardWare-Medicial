@@ -32,3 +32,17 @@ yarn-debug.log*
 
 # Local large knowledge file (kept out of Git/GitHub)
 backend/data/knowledge/departments/infectious_disease_感染科/Major_Infectious_Diseases_3rd_edition.pdf
+
+# Local evaluation/runtime artifacts
+.deepeval/
+backend/.deepeval/
+backend/logs/*.log
+backend/storage/chat_db/*.db
+backend/storage/vector_store/
+backend/storage/ecg_reports/*.pdf
+backend/storage/profiles/*.json
+backend/data/knowledge/**/*.pdf
+backend/data/knowledge/**/*.epub
+corrupt_store/
+empty_store/
+coverage_gap/

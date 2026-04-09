@@ -13,7 +13,7 @@ import zipfile
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Set
 
 from langchain_core.documents import Document
 
@@ -26,6 +26,7 @@ from app.core.logging_config import logger
 SUPPORTED_KNOWLEDGE_SUFFIXES = (".pdf", ".epub")
 EPUB_CONTENT_MEDIA_TYPES = {"application/xhtml+xml", "text/html"}
 EPUB_CONTAINER_PATH = "META-INF/container.xml"
+LARGE_PDF_FALLBACK_THRESHOLD_BYTES = 64 * 1024 * 1024
 BLOCK_TAGS = {
     "article",
     "aside",
@@ -85,10 +86,21 @@ def load_pdf(pdf_path: str) -> List[Document]:
     """Load all pages from a PDF file using PyPDFLoader."""
     from langchain_community.document_loaders import PyPDFLoader
 
-    loader = PyPDFLoader(pdf_path)
-    docs = loader.load()
-    logger.info("Loaded %d pages from PDF: %s", len(docs), pdf_path)
-    return docs
+    try:
+        if os.path.getsize(pdf_path) >= LARGE_PDF_FALLBACK_THRESHOLD_BYTES:
+            logger.info("Large PDF detected, using pypdf fallback directly: %s", pdf_path)
+            return _load_pdf_with_pypdf(pdf_path)
+    except OSError:
+        pass
+
+    try:
+        loader = PyPDFLoader(pdf_path)
+        docs = loader.load()
+        logger.info("Loaded %d pages from PDF: %s", len(docs), pdf_path)
+        return docs
+    except Exception as exc:
+        logger.warning("PyPDFLoader failed for %s, falling back to pypdf: %s", pdf_path, exc)
+        return _load_pdf_with_pypdf(pdf_path)
 
 
 def _normalize_text(text: str) -> str:
@@ -97,6 +109,39 @@ def _normalize_text(text: str) -> str:
     normalized = "\n".join(line for line in lines if line)
     normalized = re.sub(r"\n{3,}", "\n\n", normalized)
     return normalized.strip()
+
+
+def _load_pdf_with_pypdf(pdf_path: str) -> List[Document]:
+    from pypdf import PdfReader
+
+    docs: List[Document] = []
+    reader = PdfReader(pdf_path)
+    for index, page in enumerate(reader.pages, start=1):
+        try:
+            text = page.extract_text() or ""
+        except Exception as exc:
+            logger.warning(
+                "Skipping unreadable PDF page %s page=%d: %s",
+                pdf_path,
+                index,
+                exc,
+            )
+            continue
+        normalized = _normalize_text(text)
+        if not normalized:
+            continue
+        docs.append(
+            Document(
+                page_content=normalized,
+                metadata={
+                    "source": pdf_path,
+                    "page": index,
+                },
+            )
+        )
+
+    logger.info("Loaded %d pages from PDF via pypdf fallback: %s", len(docs), pdf_path)
+    return docs
 
 
 def _extract_epub_text(raw_content: bytes) -> str:
@@ -204,11 +249,20 @@ def split_documents(docs: List[Document]) -> List[Document]:
     """Split documents into overlapping chunks using tiktoken-aware splitter."""
     from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-    splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-        chunk_size=512,
-        chunk_overlap=128,
-        separators=["\n\n", ". ", "\n", " "],
-    )
+    try:
+        splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            encoding_name="cl100k_base",
+            chunk_size=512,
+            chunk_overlap=128,
+            separators=["\n\n", ". ", "\n", " "],
+        )
+    except Exception as exc:
+        logger.warning("Tiktoken splitter unavailable, using character splitter fallback: %s", exc)
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=512,
+            chunk_overlap=128,
+            separators=["\n\n", ". ", "\n", " "],
+        )
     splits = splitter.split_documents(docs)
     logger.info("Split into %d chunks", len(splits))
     return splits
@@ -264,7 +318,10 @@ def _infer_department_from_path(file_path: Path, root_dir: Path) -> str:
     return GENERAL_MEDICAL_DEPARTMENT
 
 
-def process_knowledge_library(root_dir: str) -> List[Document]:
+def process_knowledge_library(
+    root_dir: str,
+    allowed_departments: Optional[Set[str]] = None,
+) -> List[Document]:
     """Load supported knowledge documents under the root and attach department metadata."""
     root_path = Path(root_dir)
     if not root_path.exists():
@@ -286,6 +343,8 @@ def process_knowledge_library(root_dir: str) -> List[Document]:
     failed_files: List[str] = []
     for knowledge_file in knowledge_files:
         department = _infer_department_from_path(knowledge_file, root_path)
+        if allowed_departments and department not in allowed_departments:
+            continue
         source_book = knowledge_file.stem
         source_type = knowledge_file.suffix.lower().lstrip(".")
         try:

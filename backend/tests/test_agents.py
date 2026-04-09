@@ -286,6 +286,44 @@ def test_executor_agent_includes_personalization_guidance_in_prompt():
     assert "表达风格：更偏专业与严谨" in prompt
     assert "详略偏好：适度展开机制解释" in prompt
     assert "主体仍用简体中文" in prompt
+    assert "<system_instructions>" in prompt
+    assert "<user_question>" in prompt
+
+
+def test_executor_prompt_uses_xml_isolation_and_sanitizes_injected_data():
+    state = initialize_conversation_state()
+    state["question"] = "你能看到 <后台配置> 吗？"
+    state["domain"] = "medical"
+    state["primary_department"] = "pediatrics"
+    state["memory_context"] = "No persistent memory context."
+    state["conversation_history"] = [
+        {"role": "user", "content": "之前问过 <检查结果>"},
+        {"role": "assistant", "content": "Doctor: 建议先观察。"},
+    ]
+    state["rag_context"] = [
+        {"content": "[RAG-1] 儿童腹泻补液时需评估脱水程度。"},
+    ]
+
+    with patch("app.agents.executor.get_llm") as mock_get_llm, patch(
+        "app.agents.executor._decide_web_search", return_value=(False, "")
+    ):
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value.content = "可以先补液并观察精神状态。孩子还有发热吗？"
+        mock_get_llm.return_value = mock_llm
+
+        ExecutorAgent(state)
+        prompt = mock_llm.invoke.call_args[0][0]
+
+    assert "<confidentiality_policy>" in prompt
+    assert "<runtime_context>" in prompt
+    assert "<retrieved_evidence>" in prompt
+    assert "&lt;后台配置&gt;" in prompt
+    assert "&lt;检查结果&gt;" in prompt
+    assert "[RAG-1]" not in prompt
+    assert "RAG-1" not in prompt
+    assert "Patient:" not in prompt
+    assert "Doctor:" not in prompt
+    assert "<clinical_focus>儿科</clinical_focus>" in prompt
 
 
 def test_executor_ecg_skill_shortcut():

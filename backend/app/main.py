@@ -32,8 +32,7 @@ from app.core.config import (
     VECTOR_STORE_DIR,
 )
 from app.core.logging_config import logger
-from app.services.chat_service import chat_service
-from app.services.database_service import db_service
+from app.services import chat_service, db_service
 from app.tools.pdf_loader import process_knowledge_library, process_pdf
 from app.tools.vector_store import get_or_create_vectorstore
 

@@ -27,6 +27,12 @@ def _render_notes(
     use_rag: bool,
     need_rag: bool,
     primary_department: str,
+    rag_used: bool,
+    web_used: bool,
+    cache_hit: bool,
+    summary_used: bool,
+    prompt_token_estimate: int,
+    latency_ms: float,
 ) -> str:
     parts = [
         f"safety_level={safety_level}",
@@ -34,6 +40,12 @@ def _render_notes(
         f"primary_department={primary_department}",
         f"use_rag={use_rag}",
         f"need_rag={need_rag}",
+        f"rag_used={rag_used}",
+        f"web_used={web_used}",
+        f"cache_hit={cache_hit}",
+        f"summary_used={summary_used}",
+        f"prompt_tokens={prompt_token_estimate}",
+        f"latency_ms={round(latency_ms, 2)}",
     ]
     return ", ".join(parts)
 
@@ -48,11 +60,29 @@ def append_flow_trace_record(
     primary_department: str,
     use_rag: bool,
     need_rag: bool,
+    rag_used: bool = False,
+    web_used: bool = False,
+    cache_hit: bool = False,
+    summary_used: bool = False,
+    prompt_token_estimate: int = 0,
+    latency_ms: float = 0.0,
 ) -> None:
     """Append one trace record to markdown and JSONL docs."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     flow_trace_list = list(flow_trace)
-    notes = _render_notes(safety_level, domain, use_rag, need_rag, primary_department)
+    notes = _render_notes(
+        safety_level,
+        domain,
+        use_rag,
+        need_rag,
+        primary_department,
+        rag_used,
+        web_used,
+        cache_hit,
+        summary_used,
+        prompt_token_estimate,
+        latency_ms,
+    )
 
     record = {
         "timestamp": timestamp,
