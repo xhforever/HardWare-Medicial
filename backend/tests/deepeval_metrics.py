@@ -48,6 +48,63 @@ def _extract_eval_terms(text: str) -> list[str]:
     return terms
 
 
+def _normalize_eval_text(text: str) -> str:
+    normalized = str(text or "").lower()
+    normalized = normalized.replace("℃", "度").replace("°c", "度")
+    normalized = re.sub(r"\s+", "", normalized)
+    return normalized
+
+
+def _coerce_claim_specs(claims: list[Any]) -> list[dict[str, Any]]:
+    normalized_claims = []
+    for item in claims or []:
+        if isinstance(item, str):
+            claim_text = item.strip()
+            match_any = [claim_text] if claim_text else []
+            match_all = []
+            match_none = []
+        elif isinstance(item, dict):
+            claim_text = str(
+                item.get("claim") or item.get("statement") or item.get("name") or ""
+            ).strip()
+            raw_match_any = item.get("match_any") or []
+            if not raw_match_any and claim_text:
+                raw_match_any = [claim_text]
+            match_any = [str(term).strip() for term in raw_match_any if str(term).strip()]
+            match_all = [
+                str(term).strip()
+                for term in (item.get("match_all") or [])
+                if str(term).strip()
+            ]
+            match_none = [
+                str(term).strip()
+                for term in (item.get("match_none") or [])
+                if str(term).strip()
+            ]
+        else:
+            continue
+
+        normalized_claims.append(
+            {
+                "claim": claim_text or "unnamed-claim",
+                "match_any": [_normalize_eval_text(term) for term in match_any],
+                "match_all": [_normalize_eval_text(term) for term in match_all],
+                "match_none": [_normalize_eval_text(term) for term in match_none],
+            }
+        )
+    return normalized_claims
+
+
+def _claim_matches(normalized_text: str, claim_spec: dict[str, Any]) -> bool:
+    match_any = claim_spec.get("match_any") or []
+    match_all = claim_spec.get("match_all") or []
+    match_none = claim_spec.get("match_none") or []
+    any_hit = True if not match_any else any(term in normalized_text for term in match_any)
+    all_hit = all(term in normalized_text for term in match_all)
+    none_hit = any(term in normalized_text for term in match_none)
+    return any_hit and all_hit and not none_hit
+
+
 class ChineseOutputMetric(BaseMetric):
     def __init__(self, min_chinese_chars: int = 12):
         self.min_chinese_chars = min_chinese_chars
@@ -245,6 +302,148 @@ class ContainsTermsMetric(BaseMetric):
     @property
     def __name__(self) -> str:
         return "ContainsTermsMetric"
+
+
+class ClaimFaithfulnessMetric(BaseMetric):
+    """Check whether answer claims stay within evidence-backed claim envelopes."""
+
+    def __init__(
+        self,
+        supported_claims: list[Any],
+        *,
+        forbidden_claims: list[Any] | None = None,
+        min_supported_claims: int | None = None,
+        min_coverage: float = 0.75,
+        max_forbidden_claims: int = 0,
+    ):
+        self.supported_claims = _coerce_claim_specs(supported_claims)
+        self.forbidden_claims = _coerce_claim_specs(forbidden_claims or [])
+        self.min_supported_claims = (
+            len(self.supported_claims)
+            if min_supported_claims is None
+            else min_supported_claims
+        )
+        self.min_coverage = min_coverage
+        self.max_forbidden_claims = max_forbidden_claims
+        self.threshold = min_coverage
+        self.async_mode = False
+        self.strict_mode = True
+        self.include_reason = True
+
+    def measure(self, test_case: LLMTestCase, *args, **kwargs) -> float:
+        normalized_text = _normalize_eval_text(test_case.actual_output or "")
+        if not normalized_text:
+            self.score = 0.0
+            self.reason = "actual_output is empty"
+            self.success = False
+            return self.score
+
+        supported_hits = [
+            spec["claim"]
+            for spec in self.supported_claims
+            if _claim_matches(normalized_text, spec)
+        ]
+        missing_supported = [
+            spec["claim"]
+            for spec in self.supported_claims
+            if spec["claim"] not in supported_hits
+        ]
+        forbidden_hits = [
+            spec["claim"]
+            for spec in self.forbidden_claims
+            if _claim_matches(normalized_text, spec)
+        ]
+
+        supported_total = len(self.supported_claims)
+        coverage = len(supported_hits) / supported_total if supported_total else 1.0
+        precision_denominator = len(supported_hits) + len(forbidden_hits)
+        claim_precision = (
+            len(supported_hits) / precision_denominator
+            if precision_denominator
+            else 0.0
+        )
+
+        self.score = round((coverage + claim_precision) / 2, 4)
+        self.reason = (
+            f"supported_hits={supported_hits}; missing_supported={missing_supported}; "
+            f"forbidden_hits={forbidden_hits}; coverage={coverage:.2f}; "
+            f"claim_precision={claim_precision:.2f}"
+        )
+        self.success = (
+            len(supported_hits) >= self.min_supported_claims
+            and coverage >= self.min_coverage
+            and len(forbidden_hits) <= self.max_forbidden_claims
+        )
+        return self.score
+
+    async def a_measure(
+        self,
+        test_case: LLMTestCase,
+        *args,
+        **kwargs,
+    ) -> float:
+        return self.measure(test_case, *args, **kwargs)
+
+    def is_successful(self) -> bool:
+        return bool(self.success)
+
+    @property
+    def __name__(self) -> str:
+        return "ClaimFaithfulnessMetric"
+
+
+class AnswerEvidenceCoverageMetric(BaseMetric):
+    """Check how many evidence-backed claims are reflected in the answer."""
+
+    def __init__(self, supported_claims: list[Any], threshold: float = 0.75):
+        self.supported_claims = _coerce_claim_specs(supported_claims)
+        self.threshold = threshold
+        self.async_mode = False
+        self.strict_mode = True
+        self.include_reason = True
+
+    def measure(self, test_case: LLMTestCase, *args, **kwargs) -> float:
+        normalized_text = _normalize_eval_text(test_case.actual_output or "")
+        if not normalized_text:
+            self.score = 0.0
+            self.reason = "actual_output is empty"
+            self.success = False
+            return self.score
+
+        hits = [
+            spec["claim"]
+            for spec in self.supported_claims
+            if _claim_matches(normalized_text, spec)
+        ]
+        missing = [
+            spec["claim"]
+            for spec in self.supported_claims
+            if spec["claim"] not in hits
+        ]
+
+        total = len(self.supported_claims)
+        self.score = len(hits) / total if total else 1.0
+        self.reason = (
+            f"covered {len(hits)}/{total} evidence-backed claims; "
+            f"hits={hits}; missing={missing}"
+        )
+        self.success = self.score >= self.threshold
+        return self.score
+
+    async def a_measure(
+        self,
+        test_case: LLMTestCase,
+        *args,
+        **kwargs,
+    ) -> float:
+        return self.measure(test_case, *args, **kwargs)
+
+    def is_successful(self) -> bool:
+        return bool(self.success)
+
+    @property
+    def __name__(self) -> str:
+        return "AnswerEvidenceCoverageMetric"
 
 
 class GoldQueryAlignmentMetric(BaseMetric):
