@@ -1,14 +1,19 @@
 """Reusable local deepeval metrics for MediGenius contract tests."""
 
 from __future__ import annotations
-
 from collections import Counter
 import json
 import re
 from typing import Any
 
 from deepeval.metrics import BaseMetric
+from deepeval.models.base_model import DeepEvalBaseLLM
 from deepeval.test_case import LLMTestCase
+from pydantic import BaseModel
+
+from app.core.config import LLM_MODEL, OPENAI_WIRE_API
+from app.core.logging_config import logger
+from app.tools.llm_client import _resolve_llm_config, coerce_response_text
 
 
 def serialize_payload(payload: Any) -> str:
@@ -48,61 +53,133 @@ def _extract_eval_terms(text: str) -> list[str]:
     return terms
 
 
-def _normalize_eval_text(text: str) -> str:
-    normalized = str(text or "").lower()
-    normalized = normalized.replace("℃", "度").replace("°c", "度")
-    normalized = re.sub(r"\s+", "", normalized)
-    return normalized
+def build_project_chat_llm(
+    *,
+    tenant_id: str = "default",
+    user_id: str = "anonymous",
+    temperature: float = 0.0,
+    max_tokens: int = 1024,
+):
+    """Build a LangChain chat model from the project's runtime config."""
+    cfg = _resolve_llm_config(tenant_id, user_id)
+    api_key = cfg.get("api_key")
+    model = cfg.get("model") or LLM_MODEL
+    base_url = cfg.get("base_url")
 
-
-def _coerce_claim_specs(claims: list[Any]) -> list[dict[str, Any]]:
-    normalized_claims = []
-    for item in claims or []:
-        if isinstance(item, str):
-            claim_text = item.strip()
-            match_any = [claim_text] if claim_text else []
-            match_all = []
-            match_none = []
-        elif isinstance(item, dict):
-            claim_text = str(
-                item.get("claim") or item.get("statement") or item.get("name") or ""
-            ).strip()
-            raw_match_any = item.get("match_any") or []
-            if not raw_match_any and claim_text:
-                raw_match_any = [claim_text]
-            match_any = [str(term).strip() for term in raw_match_any if str(term).strip()]
-            match_all = [
-                str(term).strip()
-                for term in (item.get("match_all") or [])
-                if str(term).strip()
-            ]
-            match_none = [
-                str(term).strip()
-                for term in (item.get("match_none") or [])
-                if str(term).strip()
-            ]
-        else:
-            continue
-
-        normalized_claims.append(
-            {
-                "claim": claim_text or "unnamed-claim",
-                "match_any": [_normalize_eval_text(term) for term in match_any],
-                "match_all": [_normalize_eval_text(term) for term in match_all],
-                "match_none": [_normalize_eval_text(term) for term in match_none],
-            }
+    if not api_key:
+        logger.warning(
+            "Project eval LLM unavailable because OPENAI_API_KEY is not configured"
         )
-    return normalized_claims
+        return None
+
+    try:
+        from langchain_openai import ChatOpenAI
+    except Exception as exc:
+        logger.warning("langchain_openai unavailable for project eval LLM: %s", exc)
+        return None
+
+    kwargs = {
+        "api_key": api_key,
+        "model": model,
+        "temperature": temperature,
+    }
+    if OPENAI_WIRE_API == "responses":
+        kwargs["use_responses_api"] = True
+        kwargs["max_completion_tokens"] = max_tokens
+    else:
+        kwargs["max_tokens"] = max_tokens
+    if base_url:
+        kwargs["base_url"] = base_url
+
+    return ChatOpenAI(**kwargs)
 
 
-def _claim_matches(normalized_text: str, claim_spec: dict[str, Any]) -> bool:
-    match_any = claim_spec.get("match_any") or []
-    match_all = claim_spec.get("match_all") or []
-    match_none = claim_spec.get("match_none") or []
-    any_hit = True if not match_any else any(term in normalized_text for term in match_any)
-    all_hit = all(term in normalized_text for term in match_all)
-    none_hit = any(term in normalized_text for term in match_none)
-    return any_hit and all_hit and not none_hit
+def _build_schema_fallback_prompt(prompt: Any, schema: type[BaseModel]) -> str:
+    if isinstance(prompt, str):
+        prompt_text = prompt
+    else:
+        prompt_text = json.dumps(prompt, ensure_ascii=False, default=str)
+
+    schema_text = json.dumps(
+        schema.model_json_schema(), ensure_ascii=False, sort_keys=True
+    )
+    return (
+        f"{prompt_text}\n\n"
+        "请严格输出一个 JSON 对象，不要输出额外解释、Markdown 或代码块。\n"
+        f"JSON Schema:\n{schema_text}"
+    )
+
+
+class ProjectDeepEvalLLM(DeepEvalBaseLLM):
+    """deepeval adapter that reuses MediGenius runtime LLM configuration."""
+
+    def __init__(
+        self,
+        *,
+        tenant_id: str = "default",
+        user_id: str = "anonymous",
+        temperature: float = 0.0,
+        max_tokens: int = 1024,
+    ):
+        self.tenant_id = tenant_id
+        self.user_id = user_id
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        cfg = _resolve_llm_config(tenant_id, user_id)
+        self._configured_model_name = str(cfg.get("model") or LLM_MODEL)
+        super().__init__(model=self._configured_model_name)
+
+    def load_model(self):
+        llm = build_project_chat_llm(
+            tenant_id=self.tenant_id,
+            user_id=self.user_id,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )
+        if llm is None:
+            raise RuntimeError("Project eval LLM is unavailable")
+        return llm
+
+    def generate(self, prompt: Any, schema: type[BaseModel] | None = None):
+        if schema is None:
+            return coerce_response_text(self.model.invoke(prompt))
+
+        try:
+            structured_llm = self.model.with_structured_output(schema)
+            return structured_llm.invoke(prompt)
+        except Exception as exc:
+            logger.warning(
+                "ProjectDeepEvalLLM structured output failed for %s: %s",
+                self.get_model_name(),
+                exc,
+            )
+            fallback_prompt = _build_schema_fallback_prompt(prompt, schema)
+            return coerce_response_text(self.model.invoke(fallback_prompt))
+
+    async def a_generate(self, prompt: Any, schema: type[BaseModel] | None = None):
+        if schema is None:
+            return coerce_response_text(await self.model.ainvoke(prompt))
+
+        try:
+            structured_llm = self.model.with_structured_output(schema)
+            return await structured_llm.ainvoke(prompt)
+        except Exception as exc:
+            logger.warning(
+                "ProjectDeepEvalLLM async structured output failed for %s: %s",
+                self.get_model_name(),
+                exc,
+            )
+            fallback_prompt = _build_schema_fallback_prompt(prompt, schema)
+            return coerce_response_text(await self.model.ainvoke(fallback_prompt))
+
+    def get_model_name(self, *args, **kwargs) -> str:
+        return self._configured_model_name
+
+    def supports_structured_outputs(self) -> bool:
+        return True
+
+    def supports_json_mode(self) -> bool:
+        return True
 
 
 class ChineseOutputMetric(BaseMetric):
@@ -302,148 +379,6 @@ class ContainsTermsMetric(BaseMetric):
     @property
     def __name__(self) -> str:
         return "ContainsTermsMetric"
-
-
-class ClaimFaithfulnessMetric(BaseMetric):
-    """Check whether answer claims stay within evidence-backed claim envelopes."""
-
-    def __init__(
-        self,
-        supported_claims: list[Any],
-        *,
-        forbidden_claims: list[Any] | None = None,
-        min_supported_claims: int | None = None,
-        min_coverage: float = 0.75,
-        max_forbidden_claims: int = 0,
-    ):
-        self.supported_claims = _coerce_claim_specs(supported_claims)
-        self.forbidden_claims = _coerce_claim_specs(forbidden_claims or [])
-        self.min_supported_claims = (
-            len(self.supported_claims)
-            if min_supported_claims is None
-            else min_supported_claims
-        )
-        self.min_coverage = min_coverage
-        self.max_forbidden_claims = max_forbidden_claims
-        self.threshold = min_coverage
-        self.async_mode = False
-        self.strict_mode = True
-        self.include_reason = True
-
-    def measure(self, test_case: LLMTestCase, *args, **kwargs) -> float:
-        normalized_text = _normalize_eval_text(test_case.actual_output or "")
-        if not normalized_text:
-            self.score = 0.0
-            self.reason = "actual_output is empty"
-            self.success = False
-            return self.score
-
-        supported_hits = [
-            spec["claim"]
-            for spec in self.supported_claims
-            if _claim_matches(normalized_text, spec)
-        ]
-        missing_supported = [
-            spec["claim"]
-            for spec in self.supported_claims
-            if spec["claim"] not in supported_hits
-        ]
-        forbidden_hits = [
-            spec["claim"]
-            for spec in self.forbidden_claims
-            if _claim_matches(normalized_text, spec)
-        ]
-
-        supported_total = len(self.supported_claims)
-        coverage = len(supported_hits) / supported_total if supported_total else 1.0
-        precision_denominator = len(supported_hits) + len(forbidden_hits)
-        claim_precision = (
-            len(supported_hits) / precision_denominator
-            if precision_denominator
-            else 0.0
-        )
-
-        self.score = round((coverage + claim_precision) / 2, 4)
-        self.reason = (
-            f"supported_hits={supported_hits}; missing_supported={missing_supported}; "
-            f"forbidden_hits={forbidden_hits}; coverage={coverage:.2f}; "
-            f"claim_precision={claim_precision:.2f}"
-        )
-        self.success = (
-            len(supported_hits) >= self.min_supported_claims
-            and coverage >= self.min_coverage
-            and len(forbidden_hits) <= self.max_forbidden_claims
-        )
-        return self.score
-
-    async def a_measure(
-        self,
-        test_case: LLMTestCase,
-        *args,
-        **kwargs,
-    ) -> float:
-        return self.measure(test_case, *args, **kwargs)
-
-    def is_successful(self) -> bool:
-        return bool(self.success)
-
-    @property
-    def __name__(self) -> str:
-        return "ClaimFaithfulnessMetric"
-
-
-class AnswerEvidenceCoverageMetric(BaseMetric):
-    """Check how many evidence-backed claims are reflected in the answer."""
-
-    def __init__(self, supported_claims: list[Any], threshold: float = 0.75):
-        self.supported_claims = _coerce_claim_specs(supported_claims)
-        self.threshold = threshold
-        self.async_mode = False
-        self.strict_mode = True
-        self.include_reason = True
-
-    def measure(self, test_case: LLMTestCase, *args, **kwargs) -> float:
-        normalized_text = _normalize_eval_text(test_case.actual_output or "")
-        if not normalized_text:
-            self.score = 0.0
-            self.reason = "actual_output is empty"
-            self.success = False
-            return self.score
-
-        hits = [
-            spec["claim"]
-            for spec in self.supported_claims
-            if _claim_matches(normalized_text, spec)
-        ]
-        missing = [
-            spec["claim"]
-            for spec in self.supported_claims
-            if spec["claim"] not in hits
-        ]
-
-        total = len(self.supported_claims)
-        self.score = len(hits) / total if total else 1.0
-        self.reason = (
-            f"covered {len(hits)}/{total} evidence-backed claims; "
-            f"hits={hits}; missing={missing}"
-        )
-        self.success = self.score >= self.threshold
-        return self.score
-
-    async def a_measure(
-        self,
-        test_case: LLMTestCase,
-        *args,
-        **kwargs,
-    ) -> float:
-        return self.measure(test_case, *args, **kwargs)
-
-    def is_successful(self) -> bool:
-        return bool(self.success)
-
-    @property
-    def __name__(self) -> str:
-        return "AnswerEvidenceCoverageMetric"
 
 
 class GoldQueryAlignmentMetric(BaseMetric):
